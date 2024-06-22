@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nebulo</title>
+  <!-- Bootstrap CSS -->
+  <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  <style>
+    body {
+      background-color: #f8f9fa;
+    }
+    .container {
+      margin-top: 50px;
+    }
+    .form-group label {
+      font-weight: bold;
+    }
+    h1 {
+      margin-bottom: 40px;
+      text-align: center;
+      color: #007bff; 
+      font-size: 3.5rem; 
+      text-shadow: 2px 2px 4px rgba(0,0,0,0.4);
+    }
+    h2 {
+      margin-top: 40px;
+      color: #6c757d;
+    }
+    .btn-primary {
+      width: 100%;
+      padding: 10px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Nebulo</h1>
+    <form method="POST">
+      <div class="form-group">
+        <label for="query">Enter your query:</label>
+        <input type="text" class="form-control" id="query" name="query" placeholder="Type something...">
+      </div>
+      <button type="submit" class="btn btn-primary">Search</button>
+    </form>
+
+    {% if results %}
+      <h2>Search results:</h2>
+      <table class="table table-striped">
+        <thead class="thead-dark">
+          <tr>
+            <th style="width: 10%;">Docno</th> 
+            <th>Document Text</th> 
+          </tr>
+        </thead>
+        <tbody>
+          {% for result in results %}
+            <tr>
+              <td>{{ result.docno }}</td>
+              <td>{{ result.document_text }}</td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+
+  <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.0.7/dist/js/popper.min.js"></script>
+  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
