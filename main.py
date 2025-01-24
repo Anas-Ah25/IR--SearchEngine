@@ -66,27 +66,54 @@ def extract_expanded_query(x): # take the outputed format of expanded query and 
 def process_query(query_text, index, documentsDf):
     processed_query = preprocessing(query_text)
     print(f"Processed Query: {processed_query}")
+    
     expander = pt.rewrite.RM3(index, fb_terms=10, fb_docs=100)
     ret_expanded = bm25 >> expander  # expanding the query using RM3
-    expanded_query_data = ret_expanded.search(processed_query).iloc[0]["query"]
+    
+    # Perform the search and check for results
+    expanded_results = ret_expanded.search(processed_query)
+    if expanded_results.empty:  # No results after expansion
+        return {'results': [], 'expanded_query': 'No expanded query could be generated.'}
+    
+    expanded_query_data = expanded_results.iloc[0]["query"]  # Retrieve expanded query
     expanded_query_as_text = extract_expanded_query(expanded_query_data)
-    Fresult = bm25.search(expanded_query_as_text)  # final results we got after searching with new expanded query 
+    
+    # Search with the expanded query
+    final_results = bm25.search(expanded_query_as_text)
+    if final_results.empty:  # No results for the expanded query
+        return {'results': [], 'expanded_query': expanded_query_as_text}
 
+    # Process results
     results = []
-    for index, row in Fresult.iterrows():
+    for _, row in final_results.iterrows():
         docno = row['docno']
         document_text = documentsDf.loc[documentsDf['docno'] == docno, 'text'].iloc[0]
         score = row['score']  # Capture the relevance score
-        results.append({'docno': docno, 'document_text': document_text, 'score': score})  # Include the score in the result
+        results.append({'docno': docno, 'document_text': document_text, 'score': score})  # Include the score
 
     return {'results': results, 'expanded_query': expanded_query_as_text}
 
-@app.route('/',methods=['GET','POST']) 
-def search(): 
-    if request.method == 'POST':    
+
+@app.route('/', methods=['GET', 'POST'])
+def search():
+    if request.method == 'POST':
         query_text = request.form['query']
         results_data = process_query(query_text, index, documentsDf)
-        return render_template('./page.html',results=results_data['results'],expanded_query=results_data['expanded_query'])
-    return render_template('./page.html') 
+        # Check if there are no results and pass a message
+        if not results_data['results']:
+            return render_template(
+                './page.html',
+                results=None,
+                expanded_query=results_data['expanded_query'],
+                message="No documents found for the entered query."
+            )
+        return render_template(
+            './page.html',
+            results=results_data['results'],
+            expanded_query=results_data['expanded_query'],
+            message=None
+        )
+    return render_template('./page.html', results=None, message=None)
+
 if __name__ == '__main__':
     app.run(debug=True)
