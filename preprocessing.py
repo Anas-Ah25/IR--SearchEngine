@@ -8,7 +8,8 @@ class Preprocessing:
         # stemmer and stop words list
         self.stemmer = PorterStemmer()
         self.stop_words = set(stopwords.words('english'))
-    
+
+    '''--------------------------- Main ---------------------------'''
     def preprocessing(self, scentence):
         tokens = word_tokenize(scentence) # tokenize the sentence 
         preprocessed_tokens = [] 
@@ -25,9 +26,13 @@ class Preprocessing:
                 preprocessed_tokens.append(token_stem)
                 
         return ' '.join(preprocessed_tokens)
+    '''----------------------------------------------------------------'''
+
+
     
+    '''--------------------------- SymSpell ---------------------------'''
     def initialize_symspell(self) -> SymSpell:
-        ''' Initialize the SymSpell spell checker '''
+        ''' Initialize the SymSpell spell checker, used to correct spelling of words'''
         dictionary_path = pkg_resources.resource_filename("symspellpy", "frequency_dictionary_en_82_765.txt") # directly access the file / can be accessed from the repo or downloaded locally
         max_edit_distance = 2
         prefix_length = 7
@@ -43,7 +48,7 @@ class Preprocessing:
         if suggestions:
             return suggestions[0].term  
         return text
-
+    '''----------------------------------------------------------------'''
 
 # # test
 
