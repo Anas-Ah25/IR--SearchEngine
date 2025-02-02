@@ -11,18 +11,6 @@ pt.init(boot_packages=["com.github.terrierteam:terrier-prf:-SNAPSHOT"])
 app = Flask(__name__)
 
 
-def preprocessing(row): # manual function to preprocess the data
-  stemmer = PorterStemmer()
-  stopWords = set(stopwords.words('english'))
-  tokens = word_tokenize(row)
-  preprocessed = []
-  for token in tokens:
-    # Ntoken = re.sub(r'[^a-zA-Z0-9\s\?]',' ',token)
-    Ntoken = re.sub(r"[^a-zA-Z0-9 ]", "", token)
-    Ntoken = re.sub(r"\?\s", " ", token)
-    preprocessed.append((stemmer.stem(Ntoken)).lower())
-    preprocessed = [token for token in preprocessed if token != '?' and token not in stopWords and len(token) != 1 and not (token.isdigit())]
-  return ' '.join(preprocessed)
 
 # ---------------- load the data ----------------
 '''  This data is a built in dataset from pyterrier library,
@@ -117,3 +105,33 @@ def search():
 
 if __name__ == '__main__':
     app.run(debug=True)
+
+# ''' Prprocessing data, excluding the stop words and stemming the data and correct coruppted words'''
+# class Preprocessing:
+#     def __init__(self) :
+
+#     def preprocessing(row): # manual function to preprocess the data
+#         stemmer = PorterStemmer()
+#         stopWords = set(stopwords.words('english'))
+#         tokens = word_tokenize(row)
+#         preprocessed = []
+#         for token in tokens:
+#             # Ntoken = re.sub(r'[^a-zA-Z0-9\s\?]',' ',token)
+#             Ntoken = re.sub(r"[^a-zA-Z0-9 ]", "", token)
+#             Ntoken = re.sub(r"\?\s", " ", token)
+#             preprocessed.append((stemmer.stem(Ntoken)).lower())
+#             preprocessed = [token for token in preprocessed if token != '?' and token not in stopWords and len(token) != 1 and not (token.isdigit())]
+#         return ' '.join(preprocessed)
+    
+#     def initialize_symspell(dictionary_path="frequency_dictionary_en_82_765.txt"):
+#         max_edit_distance = 2
+#         prefix_length = 7
+#         sym_spell = SymSpell(max_edit_distance, prefix_length)
+#         sym_spell.load_dictionary(dictionary_path, term_index=0, count_index=1)
+#         return sym_spell
+
+#     def correct_spelling(text: str, sym_spell: SymSpell) -> str:
+#         suggestions = sym_spell.lookup_compound(text, max_edit_distance=2)  # multiple words 
+#         if suggestions:
+#             return suggestions[0].term  
+#         return text
