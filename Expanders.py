@@ -1,6 +1,6 @@
 from preprocessing import *  # Make sure your Preprocessing class is available
-
-
+import pandas as pd
+import os
 
 class Expander(ABC):
     @abstractmethod
@@ -29,17 +29,122 @@ class RM3(Expander):
         # retreival using bm25 then expand (using the data in expanding)
         ret_expanded = self.bm25 >> self.expander
         result_df = ret_expanded.search(processed_query)
-        expanded_query = result_df.iloc[0]["query"] # get the expanded query 
-        print('not formatted query: ', expanded_query)
-        # remove the first token, shape now: ' '
-        expanded_query_formatted = ' '.join(expanded_query.split()[1:]) # formatting to be normal scentence like input query again
-        return expanded_query_formatted
+        expanded_query = result_df.iloc[0]["query"] # get the expanded query, weighted query
+        '''
+        # print('not formatted query: ', expanded_query)
+        expansion gives weighted query not just string, shape now: ' auror^0.044444438 aurora^0.044444438 occur^0.044444438 '
+        # formattedQuery = ' '.join(expanded_query.split()[1:])
+        '''
+        return expanded_query 
 # -----------------------------------------------------------------------------------------------------
-# test the class 
+
+# ''' ---------------------------- Glove Expander ---------------------------- '''
+
+# class Glove(Expander):
+#     def __init__(self, glove_model):
+#         """
+#         Args:
+#             glove_model: A preloaded GloVe embedding model or dictionary.
+#         """
+#         self.glove_model = glove_model
+        
+#     def expand(self, query, **kwargs):
+#         """
+#         Placeholder for a GloVe-based expansion method.
+#         You might, for example, retrieve similar words from your glove_model.
+#         """
+#         # TODO: Implement expansion logic using self.glove_model.
+#         return query
+    
 
 
-bm25 = pt.BatchRetrieve(index, wmodel="BM25")
-rm3 = RM3(bm25, index, preprocessor)
-query = "What is the capital of France?"
-expanded_query = rm3.expand(query)
+# ###############################################################################
+# # Word2Vec Expander (Placeholder)
+# ###############################################################################
 
+# class Word2Vec(Expander):
+#     def __init__(self, word2vec_model):
+#         """
+#         Args:
+#             word2vec_model: A preloaded Word2Vec model.
+#         """
+#         self.word2vec_model = word2vec_model
+        
+#     def expand(self, query, **kwargs):
+#         """
+#         Placeholder for a Word2Vec-based expansion method.
+#         """
+#         # TODO: Implement expansion logic using self.word2vec_model.
+#         return query
+
+# ###############################################################################
+# # BERT Expander
+# ###############################################################################
+
+# class Bert(Expander):
+#     def __init__(self, device=None, model_name: str = "bert-base-uncased"):
+
+#         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+#         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+#         self.model = AutoModel.from_pretrained(model_name).to(self.device)
+        
+#     def _encode(self, text, max_length=32):
+#         return self.tokenizer.encode_plus(
+#             text,
+#             add_special_tokens=True,
+#             truncation=True,
+#             max_length=max_length,
+#             padding="max_length",
+#             return_attention_mask=True,
+#             return_tensors='pt'
+#         )
+        
+#     def _get_embedding(self, text):
+#         tokens = self._encode(text)
+#         input_ids = tokens["input_ids"].to(self.device)
+#         attention_mask = tokens["attention_mask"].to(self.device)
+#         with torch.no_grad():
+#             output = self.model(input_ids=input_ids, attention_mask=attention_mask)
+#         return output.last_hidden_state
+        
+#     def _compute_cosine_similarity(self, a, b):
+#         a_np = a.cpu().detach().numpy().reshape(1, -1)
+#         b_np = b.cpu().detach().numpy().reshape(1, -1)
+#         return cosine_similarity(a_np, b_np)[0, 0]
+        
+#     def expand(self, query, **kwargs):
+#         """
+#         Expands the query using a BERT-based similarity approach.
+        
+#         Expected kwargs:
+#             documents_df: A pandas DataFrame with a 'preprocessed_text' column.
+#             topRank (int): Number of expansion terms to select (default 4).
+#             similarity_threshold (float): Cosine similarity threshold (default 0.6).
+#         """
+#         documents_df = kwargs.get("documents_df")
+#         if documents_df is None:
+#             raise ValueError("Bert expander requires 'documents_df' in kwargs")
+#         topRank = kwargs.get("topRank", 4)
+#         similarity_threshold = kwargs.get("similarity_threshold", 0.6)
+        
+#         # Obtain the [CLS] embedding for the query.
+#         query_embedding = self._get_embedding(query)[0, 0]
+        
+#         # Build vocabulary from preprocessed documents.
+#         vocabulary = set()
+#         for doc in documents_df["preprocessed_text"]:
+#             vocabulary.update(doc.split())
+        
+#         candidate_terms = []
+#         for term in vocabulary:
+#             term_embedding = self._get_embedding(term)[0, 0]
+#             sim = self._compute_cosine_similarity(query_embedding, term_embedding)
+#             if sim > similarity_threshold:
+#                 candidate_terms.append((term, sim))
+        
+#         # Sort candidates by similarity in descending order.
+#         candidate_terms.sort(key=lambda x: x[1], reverse=True)
+#         top_terms = [term for term, sim in candidate_terms[:topRank]]
+        
+#         # Return the expanded query (original plus expansion terms).
+#         return query + " " + " ".join(top_terms)
