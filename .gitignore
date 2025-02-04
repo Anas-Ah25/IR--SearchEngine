@@ -4,3 +4,5 @@ dynamic_index/data.inverted.bf
 dynamic_index/data.lexicon.fsomapfile
 dynamic_index/data.document.fsarrayfile
 dynamic_index/data.meta-0.fsomapfile
+Bert-embeddingsGenerator.py
+glove.6B.100d.txt

@@ -4,6 +4,8 @@ class Expander(ABC):
     @abstractmethod
     def expand(self, query, **kwargs): # abstract method for tools 
         pass
+
+    @staticmethod
     def cosine_similarity_M(a,b):
         ''' manual cosine similarity function, using arrays and torch tensors'''
         try:
@@ -15,7 +17,7 @@ class Expander(ABC):
         return cosine_similarity(a_np, b_np)[0, 0] # sklearn cosine similarity function
 # ============================== Expanding Methods ==============================
 
-''' ---------------------------- Rm3 Expander ---------------------------- '''
+''' =================---------------------------- Rm3 Expander ----------------------------================= '''
 class RM3(Expander):
     def __init__(self, bm25, index, preprocessor, fb_terms=10, fb_docs=100):
         """
@@ -44,7 +46,7 @@ class RM3(Expander):
         return expanded_query 
 # -----------------------------------------------------------------------------------------------------
 
-# ''' ---------------------------- Glove Expander ---------------------------- '''
+''' =================-------------------------- Glove Expander ----------------------------================='''
 
 class Glove(Expander):
     ''' 
@@ -93,3 +95,57 @@ class Glove(Expander):
         expansion_terms = list(set(expansion_terms))
         expanded_query = query + " " + " ".join(expansion_terms)
         return expanded_query
+# -----------------------------------------------------------------------------------------------------
+
+
+
+''' =================-------------------------- Bert Expander ----------------------------================='''
+
+
+class Bert(Expander):
+    def __init__(self, device=None, model_name: str = "prajjwal1/bert-tiny"): 
+        '''tried the amazon/bort, distilbert-base-uncased, prajjwal1/bert-tiny'''
+        self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name).to(self.device)
+        self.similarity_threshold = 0.6
+        self.topRank = 5
+
+    def _encode(self, text, max_length=32):
+        return self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            truncation=True,
+            max_length=max_length,
+            padding="max_length",
+            return_attention_mask=True,
+            return_tensors='pt'
+        )
+
+    def _get_embedding(self, text):
+        tokens = self._encode(text)
+        input_ids = tokens["input_ids"].to(self.device)
+        attention_mask = tokens["attention_mask"].to(self.device)
+        with torch.no_grad():
+            output = self.model(input_ids=input_ids, attention_mask=attention_mask)
+        return output.last_hidden_state
+
+    def expand(self, query, documents_df):
+        query_embedding = self._get_embedding(query)[0, 0]  # cls token, representing the whole query
+        vocabulary = set()
+        for doc in documents_df["preprocessed_text"]:
+            vocabulary.update(doc.split())
+
+        candidate_terms = []
+        for term in vocabulary:
+            term_embedding = self._get_embedding(term)[0, 0]
+            sim = self.cosine_similarity_M(query_embedding, term_embedding)
+            if sim > self.similarity_threshold:
+                candidate_terms.append((term, sim))
+
+        # Sort candidates by similarity in descending order
+        candidate_terms.sort(key=lambda x: x[1], reverse=True)
+        top_terms = [term for term, sim in candidate_terms[:self.topRank]]
+
+        # Return the expanded query (original plus expansion terms).
+        return query + " " + " ".join(top_terms)

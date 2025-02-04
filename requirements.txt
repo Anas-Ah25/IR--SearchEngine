@@ -1,1 +1,3 @@
-symspellpy
+version https://git-lfs.github.com/spec/v1
+oid sha256:0a2a15b6d6ba5232d232800722043213b90a11db6a520c736a039cb988a3c70b
+size 12
