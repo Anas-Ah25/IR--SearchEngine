@@ -1,12 +1,18 @@
-from preprocessing import *  # Make sure your Preprocessing class is available
-import pandas as pd
-import os
+from preprocessing import * 
 
 class Expander(ABC):
     @abstractmethod
     def expand(self, query, **kwargs): # abstract method for tools 
         pass
-
+    def cosine_similarity_M(a,b):
+        ''' manual cosine similarity function, using arrays and torch tensors'''
+        try:
+            a_np = a.cpu().detach().numpy().reshape(1, -1)
+            b_np = b.cpu().detach().numpy().reshape(1, -1)
+        except AttributeError:
+            a_np = np.array(a).reshape(1, -1)
+            b_np = np.array(b).reshape(1, -1)
+        return cosine_similarity(a_np, b_np)[0, 0] # sklearn cosine similarity function
 # ============================== Expanding Methods ==============================
 
 ''' ---------------------------- Rm3 Expander ---------------------------- '''
@@ -40,111 +46,50 @@ class RM3(Expander):
 
 # ''' ---------------------------- Glove Expander ---------------------------- '''
 
-# class Glove(Expander):
-#     def __init__(self, glove_model):
-#         """
-#         Args:
-#             glove_model: A preloaded GloVe embedding model or dictionary.
-#         """
-#         self.glove_model = glove_model
-        
-#     def expand(self, query, **kwargs):
-#         """
-#         Placeholder for a GloVe-based expansion method.
-#         You might, for example, retrieve similar words from your glove_model.
-#         """
-#         # TODO: Implement expansion logic using self.glove_model.
-#         return query
+class Glove(Expander):
+    ''' 
+    The main approach i usedhere is importing a glove trained model results from "https://nlp.stanford.edu/projects/glove/", and used the 6B.100d version,
+    then used it as a base to search for the words from query, compare cosine similarity between the words and the words in the glove model to have an 
+    estimation for the semantic meaning of the word and other words, then add this words to the query
+    '''
+    def __init__(self, glove_file, topK=5, similarity_threshold=0.5):
+
+        self.topK = topK # words will be added as expansion
+        self.similarity_threshold = similarity_threshold #  minimum similarity to be added as expansion
+        self.embeddings = {}  # Dictionary to map word -> vector
+        self.dim = None
+        self._load_glove(glove_file) # glove emebedding file (used the 100b version)
     
-
-
-# ###############################################################################
-# # Word2Vec Expander (Placeholder)
-# ###############################################################################
-
-# class Word2Vec(Expander):
-#     def __init__(self, word2vec_model):
-#         """
-#         Args:
-#             word2vec_model: A preloaded Word2Vec model.
-#         """
-#         self.word2vec_model = word2vec_model
-        
-#     def expand(self, query, **kwargs):
-#         """
-#         Placeholder for a Word2Vec-based expansion method.
-#         """
-#         # TODO: Implement expansion logic using self.word2vec_model.
-#         return query
-
-# ###############################################################################
-# # BERT Expander
-# ###############################################################################
-
-# class Bert(Expander):
-#     def __init__(self, device=None, model_name: str = "bert-base-uncased"):
-
-#         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-#         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
-#         self.model = AutoModel.from_pretrained(model_name).to(self.device)
-        
-#     def _encode(self, text, max_length=32):
-#         return self.tokenizer.encode_plus(
-#             text,
-#             add_special_tokens=True,
-#             truncation=True,
-#             max_length=max_length,
-#             padding="max_length",
-#             return_attention_mask=True,
-#             return_tensors='pt'
-#         )
-        
-#     def _get_embedding(self, text):
-#         tokens = self._encode(text)
-#         input_ids = tokens["input_ids"].to(self.device)
-#         attention_mask = tokens["attention_mask"].to(self.device)
-#         with torch.no_grad():
-#             output = self.model(input_ids=input_ids, attention_mask=attention_mask)
-#         return output.last_hidden_state
-        
-#     def _compute_cosine_similarity(self, a, b):
-#         a_np = a.cpu().detach().numpy().reshape(1, -1)
-#         b_np = b.cpu().detach().numpy().reshape(1, -1)
-#         return cosine_similarity(a_np, b_np)[0, 0]
-        
-#     def expand(self, query, **kwargs):
-#         """
-#         Expands the query using a BERT-based similarity approach.
-        
-#         Expected kwargs:
-#             documents_df: A pandas DataFrame with a 'preprocessed_text' column.
-#             topRank (int): Number of expansion terms to select (default 4).
-#             similarity_threshold (float): Cosine similarity threshold (default 0.6).
-#         """
-#         documents_df = kwargs.get("documents_df")
-#         if documents_df is None:
-#             raise ValueError("Bert expander requires 'documents_df' in kwargs")
-#         topRank = kwargs.get("topRank", 4)
-#         similarity_threshold = kwargs.get("similarity_threshold", 0.6)
-        
-#         # Obtain the [CLS] embedding for the query.
-#         query_embedding = self._get_embedding(query)[0, 0]
-        
-#         # Build vocabulary from preprocessed documents.
-#         vocabulary = set()
-#         for doc in documents_df["preprocessed_text"]:
-#             vocabulary.update(doc.split())
-        
-#         candidate_terms = []
-#         for term in vocabulary:
-#             term_embedding = self._get_embedding(term)[0, 0]
-#             sim = self._compute_cosine_similarity(query_embedding, term_embedding)
-#             if sim > similarity_threshold:
-#                 candidate_terms.append((term, sim))
-        
-#         # Sort candidates by similarity in descending order.
-#         candidate_terms.sort(key=lambda x: x[1], reverse=True)
-#         top_terms = [term for term, sim in candidate_terms[:topRank]]
-        
-#         # Return the expanded query (original plus expansion terms).
-#         return query + " " + " ".join(top_terms)
+    def _load_glove(self, glove_file):
+        # print("loading from glove file")
+        with open(glove_file,'r',encoding="utf-8") as f:
+            for line in f:
+                values = line.split()
+                word = values[0]
+                vector = np.asarray(values[1:], dtype='float32')
+                if self.dim is None:
+                    self.dim = vector.shape[0]
+                self.embeddings[word] = vector
+        # print(f"loaded {len(self.embeddings)} word vectors")
+    
+    def expand(self, query, **kwargs):
+        # query in normal should be passed preprocessed but in normal string scentence, so we will tokeinze it
+        tokens = re.findall(r'\w+', query) # tokenize the query
+        expansion_terms = [] # terms will be added
+        for token in tokens:
+            if token not in self.embeddings: # used small version from glove, so some words may not be found
+                continue
+            token_vec = self.embeddings[token] # get the embedding vector of the token
+            similarities = []
+            for word, vec in self.embeddings.items():
+                if word == token:
+                    continue
+                sim = Expander.cosine_similarity_M(token_vec,vec)
+                if sim >= self.similarity_threshold:
+                    similarities.append((word,sim))
+            similarities.sort(key=lambda x: x[1], reverse=True)
+            top_terms = [w for w, sim in similarities[:self.topK]] # most similar words
+            expansion_terms.extend(top_terms) 
+        expansion_terms = list(set(expansion_terms))
+        expanded_query = query + " " + " ".join(expansion_terms)
+        return expanded_query
