@@ -6,3 +6,6 @@ dynamic_index/data.document.fsarrayfile
 dynamic_index/data.meta-0.fsomapfile
 Bert-embeddingsGenerator.py
 glove.6B.100d.txt
+doc_ids.csv
+dpr_embeddings.npy
+dpr_faiss_index.idx
