@@ -58,40 +58,69 @@ class Glove(Expander):
 
         self.topK = topK # words will be added as expansion
         self.similarity_threshold = similarity_threshold #  minimum similarity to be added as expansion
-        self.embeddings = {}  # Dictionary to map word -> vector
+        self.embeddings = {}  # Dictionary to map word with it's embedding
+        self.words_list =  []
+        self.embeddings_matrix = None
         self.dim = None
         self._load_glove(glove_file) # glove emebedding file (used the 100b version)
-    
+
+
+    ''' The changed bruteforce calculation for the cosine similarity of each word, is using a vectorized format
+    by puting the words in a matrix and calculate the cosine similarity between the query word and all the words in the matrix'''
+
     def _load_glove(self, glove_file):
         # print("loading from glove file")
-        with open(glove_file,'r',encoding="utf-8") as f:
+        vectors = [] # list of vectors which will be used to create the matrix
+        with open(glove_file, 'r', encoding="utf-8") as f:
             for line in f:
-                values = line.split()
+                values = line.split() # split the line to get the word and  it's embedding as a list
                 word = values[0]
-                vector = np.asarray(values[1:], dtype='float32')
+                vector = np.asarray(values[1:], dtype='float32') 
                 if self.dim is None:
                     self.dim = vector.shape[0]
-                self.embeddings[word] = vector
+                self.embeddings[word] = vector # key is the word, value is the embedding vector
+                self.words_list.append(word)
+                vectors.append(vector) # to create the matrix 
+
+        self.embeddings_matrix = np.stack(vectors)  # the matrix with the embeddings of all words
+        norms = np.linalg.norm(self.embeddings_matrix, axis=1, keepdims=True) # Normalize the embeddings matrix rows (for cosine similarity using dot product)
+        self.normalized_embeddings_matrix = self.embeddings_matrix / (norms + 1e-10) # normalized 
         # print(f"loaded {len(self.embeddings)} word vectors")
     
+    def _vectorized_cosine_similarity(self, token_vector):
+        ''' Compute cosine similarities between token_vector and all vocabulary vectors, special version here to complete on the matrix'''
+        # Normalize token_vector
+        token_norm = np.linalg.norm(token_vector)
+        if token_norm == 0:
+            return np.zeros(self.normalized_embeddings_matrix.shape[0]) 
+        token_vector_norm = token_vector / token_norm
+        # Compute dot product with all vocabulary vectors (they are already normalized)
+        similarities = np.dot(self.normalized_embeddings_matrix, token_vector_norm)
+        return similarities
+    
     def expand(self, query, **kwargs):
-        # query in normal should be passed preprocessed but in normal string scentence, so we will tokeinze it
-        tokens = re.findall(r'\w+', query) # tokenize the query
-        expansion_terms = [] # terms will be added
+        # query in normal should be passed preprocessed but in normal string sentence, so we will tokenize it
+        tokens = re.findall(r'\w+', query)  # tokenize the query
+        expansion_terms = []  # terms will be added
         for token in tokens:
-            if token not in self.embeddings: # used small version from glove, so some words may not be found
+            if token not in self.embeddings:  # used small version from glove, so some words may not be found
                 continue
-            token_vec = self.embeddings[token] # get the embedding vector of the token
-            similarities = []
-            for word, vec in self.embeddings.items():
-                if word == token:
+            token_vec = self.embeddings[token]  # get the embedding vector of the token
+            
+            similarities = self._vectorized_cosine_similarity(token_vec) # between the token and all the words in the matrix
+            # Get indices of sorted similarities in descending order
+            sorted_indices = np.argsort(-similarities)
+            token_expansions = []
+            for idx in sorted_indices:
+                if similarities[idx] < self.similarity_threshold:
+                    break
+                candidate_word = self.words_list[idx]
+                if candidate_word == token:
                     continue
-                sim = Expander.cosine_similarity_M(token_vec,vec)
-                if sim >= self.similarity_threshold:
-                    similarities.append((word,sim))
-            similarities.sort(key=lambda x: x[1], reverse=True)
-            top_terms = [w for w, sim in similarities[:self.topK]] # most similar words
-            expansion_terms.extend(top_terms) 
+                token_expansions.append(candidate_word)
+                if len(token_expansions) >= self.topK:
+                    break
+            expansion_terms.extend(token_expansions)
         expansion_terms = list(set(expansion_terms))
         expanded_query = query + " " + " ".join(expansion_terms)
         return expanded_query
@@ -99,44 +128,61 @@ class Glove(Expander):
 
 
 
+
 ''' =================-------------------------- Bert Expander ----------------------------================='''
 
 
+""" 
+ using bert as a base to expand the query, using the embeddings of the words and the query,
+ then compare the similarity between the words and the query, tried the amazon/bort, distilbert-base-uncased, prajjwal1/bert-tiny
+ tiny has the fastest performance, and as this is a search engine, it will be the main choice
+ other proposed approach was defining a precomputed map using the distilated bert and use ANN
+                            ---------------------------------------------
+The main flow for expansion here is:
+    1. Tokenize the query and the documents using the encoder and generate attention masks
+    2. Get the embeddings of the query and the documents
+    3. Compute the cosine similarity between the query and the documents
+    4. Select the top documents with the highest similarity
+    5. Extract the terms from the selected documents
+    6. Return the expanded query
+"""
+
 class Bert(Expander):
     def __init__(self, device=None, model_name: str = "prajjwal1/bert-tiny"): 
-        '''tried the amazon/bort, distilbert-base-uncased, prajjwal1/bert-tiny'''
         self.device = device or torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModel.from_pretrained(model_name).to(self.device)
         self.similarity_threshold = 0.6
         self.topRank = 5
-
+        
+    '''Function to encode the text and get the embeddings, encoding here is to tokenize the text and label using
+    CLS (represents the whole sentence) and SEP (seperates the sentences)'''
     def _encode(self, text, max_length=32):
         return self.tokenizer.encode_plus(
             text,
-            add_special_tokens=True,
-            truncation=True,
+            add_special_tokens=True, # cls and sep
+            truncation=True, # lenth control
             max_length=max_length,
             padding="max_length",
-            return_attention_mask=True,
-            return_tensors='pt'
+            return_attention_mask=True, # attentsion mask representing the tokens generated,  1 for the real tokens and 0 for the padding
+            return_tensors='pt' # return format, considered in the cosine similarity function
         )
 
     def _get_embedding(self, text):
-        tokens = self._encode(text)
+        tokens = self._encode(text) # tokeizing the tex
         input_ids = tokens["input_ids"].to(self.device)
-        attention_mask = tokens["attention_mask"].to(self.device)
-        with torch.no_grad():
-            output = self.model(input_ids=input_ids, attention_mask=attention_mask)
+        attention_mask = tokens["attention_mask"].to(self.device) # attention mask to be used in the model
+        with torch.no_grad(): # no need to calculate the gradients
+            output = self.model(input_ids=input_ids, attention_mask=attention_mask) 
         return output.last_hidden_state
 
     def expand(self, query, documents_df):
-        query_embedding = self._get_embedding(query)[0, 0]  # cls token, representing the whole query
-        vocabulary = set()
+        query_embedding = self._get_embedding(query)[0,0]  # cls token, representing the whole query
+        vocabulary = set() # 
         for doc in documents_df["preprocessed_text"]:
             vocabulary.update(doc.split())
 
-        candidate_terms = []
+        candidate_terms = [] # the terms that will be added
         for term in vocabulary:
             term_embedding = self._get_embedding(term)[0, 0]
             sim = self.cosine_similarity_M(query_embedding, term_embedding)
