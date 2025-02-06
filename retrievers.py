@@ -60,3 +60,5 @@ class DPRRetriever(Retriever):
                 continue
             results.append((self.doc_ids[idx], dist))
         return results
+    
+
