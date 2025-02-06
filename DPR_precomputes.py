@@ -1,13 +1,13 @@
-import os
-import numpy as np
-import pandas as pd
-import torch
-import faiss
-import pyterrier as pt
 from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
-from preprocessing import Preprocessing
+from preprocessing import *
+from retrievers import *
 
-
+""" In this file i will precompute the values of embeddings for the documents in the dataset using the DPR model manually
+ave them using an ANN index (Faiss) to be used directly in search process to speed up the retrieval process, this was made on 500 document from
+vaswani dataset, 3 files are exported, embeddings.npy, index.faiss, doc_ids.csv where the embeddings is the matrix of the embeddings of the documents
+index.faiss is the index file for the embeddings, and doc_ids.csv is the file containing the document ids.
+"""
+# --------------------------- data ------------------------------------
 if not pt.started():
     pt.init(boot_packages=["com.github.terrierteam:terrier-prf:-SNAPSHOT"])
 
@@ -27,8 +27,9 @@ print("Loaded", len(documentsDf))
 preprocessor = Preprocessing()
 documentsDf["preprocessed_text"] = documentsDf["text"].apply(lambda x: preprocessor.preprocessing(x))
 
+# ---------------------------------------------------------------------
 
-
+# Dpr model and it's tokenizer
 modell = "facebook/dpr-ctx_encoder-single-nq-base"
 tokenizer = DPRContextEncoderTokenizer.from_pretrained(modell)
 model = DPRContextEncoder.from_pretrained(modell)
@@ -39,14 +40,14 @@ model.eval()
 texts = documentsDf["preprocessed_text"].tolist()
 doc_ids = documentsDf["docno"].tolist()
 num_texts = len(texts)
-batch_size = 32
+batch_size = 32 
 embeddings_list = []
 
 print("size", num_texts,"batches:", batch_size,)
-for i in range(0, num_texts, batch_size):
-    batch_texts = texts[i:i+batch_size]
-    inputs = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True)
-    inputs = {k: v.to(device) for k, v in inputs.items()}
+for i in range(0, num_texts, batch_size): # this loop is to process the embeddings in batches
+    batch_texts = texts[i:i+batch_size] # texts 
+    inputs = tokenizer(batch_texts, return_tensors="pt", padding=True, truncation=True) # tokeinze
+    inputs = {k: v.to(device) for k, v in inputs.items()} 
     with torch.no_grad():
         outputs = model(**inputs).pooler_output  # shape: (batch_size, hidden_dim)
     embeddings_list.append(outputs.cpu().numpy())
@@ -59,8 +60,7 @@ faiss.normalize_L2(embeddings_matrix)
 dim = embeddings_matrix.shape[1]
 index = faiss.IndexFlatIP(dim)
 index.add(embeddings_matrix)
-print("Faiss index built with", index.ntotal, "vectors")
-
+print("faiss index has", index.ntotal, "vectors")
 
 
 if not os.path.exists("dpr"):

@@ -7,8 +7,9 @@ import pkg_resources
 from abc import ABC, abstractmethod
 import pyterrier as pt
 import torch
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, DPRQuestionEncoder, DPRQuestionEncoderTokenizer
 from sklearn.metrics.pairwise import cosine_similarity
 import os
 import pandas as pd
 import numpy as np
+import faiss
