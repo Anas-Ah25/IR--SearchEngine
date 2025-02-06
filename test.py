@@ -1,5 +1,5 @@
 from Expanders import *
-from retrievers import *
+from retrievers import BM25Retriever, DPRRetriever, ColBERTRetriever
 from preprocessing import *
 from imports import *
 
@@ -43,30 +43,44 @@ if __name__ == "__main__":
     dpr = DPRRetriever(model_name="facebook/dpr-question_encoder-single-nq-base",num_results=100,
                                   index_file="dpr_faiss_index.idx",doc_ids_file="doc_ids.csv")
     
-   
+    colbert_retriever = ColBERTRetriever(
+        model_name="colbert-ir/colbertv2.0",
+        index_file="colbert/index.faiss",
+        doc_ids_file="colbert/doc_ids.csv",
+        num_results=10
+    )
+    
+
+
     while True:
         query = input("Enter your query: ")
-        method = input("Enter the retrieval method you want to use (BM25, DPR): ")
-        exp_method = input("Enter the expander method you want to use (RM3, Glove, Bert, or none): ")
-        final_query = query  
+        retrieval_method = input("Enter the retrieval method you want to use (BM25, DPR, ColBERT): ")
+        expander_method = input("Enter the expander method you want to use (RM3, Glove, Bert, or none): ")
         
-        if exp_method.lower() == "rm3":
+        final_query = query  
+        final_query = preprocessor.preprocessing(final_query)
+        
+        if expander_method.lower() == "rm3":
             final_query = rm3.expand(query)
-        elif exp_method.lower() == "glove":
+        elif expander_method.lower() == "glove":
             final_query = glove_expander.expand(query)
-        elif exp_method.lower() == "bert":
+        elif expander_method.lower() == "bert":
             final_query = bert_expander.expand(query, documents_df=documentsDf)
         
-        if method.lower() == "bm25":
+        if retrieval_method.lower() == "bm25":
             results = bm25.search(final_query)
             print("BM25 results:")
             print(results.head()) 
-        elif method.lower() == "dpr":
+        elif retrieval_method.lower() == "dpr":
             results = dpr.search(final_query)
             print("DPR results (docno, score):")
             print(results)
+        elif retrieval_method.lower() == "colbert":
+            results = colbert_retriever.search(final_query)
+            print("ColBERT results (docno, score):")
+            print(results)
         else:
-            print("Invalid retrieval method. Please choose BM25 or DPR.")
+            print("Invalid retrieval method. Please choose BM25, DPR, or ColBERT.")
             continue
         
         print("Final query used:", final_query)
