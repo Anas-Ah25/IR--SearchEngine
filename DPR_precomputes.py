@@ -13,17 +13,19 @@ if not pt.started():
 
 dataset = pt.datasets.get_dataset('vaswani')
 docs = []
-count = 0
+# count = 0
 for item in dataset.get_corpus_iter(verbose=True):
     doc_id = item.get("docno")
     doc_text = item.get("text")
     docs.append((doc_id, doc_text))
-    count += 1
-    if count == 500:
-        break
+    # count += 1
+    # if count == 500:
+    #     break
+# lenth of the documents
+
 
 documentsDf = pd.DataFrame(docs, columns=["docno", "text"])
-print("Loaded", len(documentsDf))
+print(" ------ Loaded docs ---------", len(documentsDf))
 preprocessor = Preprocessing()
 documentsDf["preprocessed_text"] = documentsDf["text"].apply(lambda x: preprocessor.preprocessing(x))
 

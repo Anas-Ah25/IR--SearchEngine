@@ -41,7 +41,7 @@ if __name__ == "__main__":
     
     # ---------- dpr ----------------
     dpr = DPRRetriever(model_name="facebook/dpr-question_encoder-single-nq-base",num_results=100,
-                                  index_file="dpr_faiss_index.idx",doc_ids_file="doc_ids.csv")
+                                  index_file="dpr/index.faiss",doc_ids_file="dpr/doc_ids.csv")
     
     colbert_retriever = ColBERTRetriever(
         model_name="colbert-ir/colbertv2.0",

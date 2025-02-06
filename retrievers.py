@@ -23,8 +23,8 @@ class DPRRetriever(Retriever):
                  model_name="facebook/dpr-question_encoder-single-nq-base",
                  device=None,
                  num_results=100,
-                 index_file="dpr_faiss_index.idx",
-                 doc_ids_file="doc_ids.csv"):
+                 index_file="dpr/index.idx",
+                 doc_ids_file="dpr/doc_ids.csv"):
     
         self.device = device or (torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu"))
         self.tokenizer = DPRQuestionEncoderTokenizer.from_pretrained(model_name)
